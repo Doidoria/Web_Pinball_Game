@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EPIC MARBLE DROP - ULTIMATE EDITION</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <script src="script.js" defer></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Noto+Sans+KR:wght@400;700;900&display=swap');
+        
+        body { 
+            background-color: transparent; 
+            font-family: 'Noto Sans KR', sans-serif;
+            margin: 0; padding: 0; overflow: hidden;
+        }
+        body.chroma-mode { background-color: #00FF00; }
+        
+        #game-section {
+            background: radial-gradient(circle at center, rgba(15,23,42,0.8) 0%, rgba(0,0,0,0.9) 100%);
+        }
+        body.chroma-mode #game-section { background: transparent; }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            filter: drop-shadow(0 0 10px rgba(0,0,0,0.5));
+        }
+
+        .neon-text {
+            font-family: 'Black Han Sans', sans-serif;
+            text-shadow: 0 0 10px rgba(255,255,255,0.8), 0 0 20px rgba(250,204,21,1), 0 0 40px rgba(250,204,21,1);
+        }
+
+        /* 패널 슬라이드 트랜지션 */
+        #control-panel { transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
+        .panel-hidden { transform: translateX(100%); }
+
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #0f172a; }
+        ::-webkit-scrollbar-thumb { background: #3b82f6; border-radius: 3px; }
+
+        /* 숫자 입력창의 기본 위아래 화살표(스핀 버튼) 완벽 숨기기 */
+        input[type="number"]::-webkit-outer-spin-button,
+        input[type="number"]::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        input[type="number"] {
+            -moz-appearance: textfield; /* 파이어폭스 대응 */
+        }
+    </style>
+</head>
+<body class="flex w-full h-screen text-white relative">
+
+    <div id="game-section" class="w-full h-full absolute top-0 left-0 overflow-hidden z-10">
+        
+        <div id="leaderboard" class="absolute top-6 left-6 z-40 bg-black/70 p-5 rounded-2xl border border-gray-700 backdrop-blur-md shadow-2xl opacity-0 transition-opacity duration-500">
+            <h3 class="text-xl font-black text-gray-300 mb-3 tracking-wider border-b border-gray-600 pb-2">🏆 실시간 TOP 10</h3>
+            <div id="rank-list" class="flex flex-col gap-1 text-sm font-bold"></div>
+        </div>
+
+        <div id="result-text" class="absolute top-1/3 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-[8rem] neon-text text-yellow-300 opacity-0 transition-all duration-1000 z-50 pointer-events-none scale-50 whitespace-nowrap text-center">
+            결과 대기중...
+        </div>
+        
+        <canvas id="gameCanvas"></canvas>
+
+        <div id="minimap-container" class="absolute bottom-6 left-6 z-40 bg-black/60 border-2 border-slate-600 rounded-xl p-2 backdrop-blur-sm opacity-0 transition-opacity duration-500 shadow-[0_0_15px_rgba(0,0,0,0.8)]">
+            <h4 class="text-center text-xs font-bold text-slate-400 mb-1">LIVE MAP</h4>
+            <canvas id="minimapCanvas" width="120" height="400" class="rounded border border-slate-700 bg-slate-900/50"></canvas>
+        </div>
+    </div>
+
+    <div id="control-panel" class="absolute right-0 top-0 w-80 h-full bg-slate-900 border-l border-slate-700 shadow-[0_0_50px_rgba(0,0,0,0.9)] z-50 flex flex-col">
+        <button id="btn-toggle-panel" class="absolute -left-12 top-1/2 transform -translate-y-1/2 w-12 h-24 bg-slate-800 border border-slate-600 border-r-0 rounded-l-xl flex justify-center items-center cursor-pointer hover:bg-slate-700 transition-colors shadow-[-5px_0_15px_rgba(0,0,0,0.5)]">
+            <span id="toggle-icon" class="text-2xl text-slate-300">▶</span>
+        </button>
+
+        <div class="p-6 flex flex-col gap-4 h-full overflow-y-auto">
+            <h2 class="text-2xl font-black text-center text-blue-500 tracking-tighter drop-shadow-lg">EPIC DROP<br><span class="text-sm text-slate-400">ULTIMATE EDITION</span></h2>
+
+            <div class="bg-slate-800 p-3 rounded-xl border border-slate-700 mt-2">
+                <button id="btn-chroma" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-lg transition-all active:scale-95 shadow-[0_0_15px_rgba(16,185,129,0.3)]">
+                    🟢 크로마키 토글
+                </button>
+            </div>
+            
+            <div class="bg-slate-800 p-3 rounded-xl border border-slate-700 mt-2">
+                <h3 class="text-sm font-bold text-slate-300 mb-2">물리 속도 배속 (현재: <span id="speed-val">1.0</span>x)</h3>
+                <input type="range" id="speed-slider" min="1" max="5" step="0.5" value="1" class="w-full cursor-pointer">
+            </div>
+
+            <div class="bg-slate-800 p-3 rounded-xl border border-slate-700 flex-1 flex flex-col min-h-[350px]">
+                <div class="flex justify-between items-center mb-2">
+                    <h3 class="text-sm font-bold text-slate-300">라인업 매니저</h3>
+                    <span class="text-xs text-blue-400 font-bold bg-slate-900 px-2 py-1 rounded" id="total-marbles">총 0개</span>
+                </div>
+
+                <div class="flex gap-1 mb-3 bg-slate-900 p-1 rounded-lg">
+                    <button id="tab-visual" class="flex-1 bg-slate-700 text-white text-xs font-bold py-1.5 rounded shadow">버튼 모드</button>
+                    <button id="tab-text" class="flex-1 text-slate-400 hover:text-white text-xs font-bold py-1.5 rounded transition-colors">메모장 모드</button>
+                </div>
+
+                <div id="mode-visual" class="flex-1 flex flex-col min-h-0">
+                    <div class="flex gap-2 mb-3">
+                        <input type="text" id="smart-input" class="flex-1 bg-slate-950 text-blue-100 border border-slate-600 rounded-lg p-2 focus:outline-none focus:border-blue-500 text-sm transition-colors" placeholder="이름 (엔터) 또는 복붙">
+                        <button id="btn-add-item" class="bg-blue-600 hover:bg-blue-500 text-white font-bold px-3 py-2 rounded-lg transition-colors text-sm shadow-md">추가</button>
+                    </div>
+                    <div id="visual-item-list" class="flex-1 overflow-y-auto flex flex-col gap-2 pr-1 custom-scrollbar"></div>
+                </div>
+
+                <div id="mode-text" class="hidden flex-1 flex flex-col min-h-0">
+                    <textarea id="bulk-textarea" class="w-full flex-1 bg-slate-950 text-blue-100 border border-slate-600 rounded-lg p-3 resize-none focus:outline-none focus:border-blue-500 text-sm custom-scrollbar" placeholder="치킨*3, 피자*2, 꽝*10"></textarea>
+                </div>
+
+                <button id="btn-clear-list" class="mt-3 w-full bg-red-950 hover:bg-red-900 text-red-400 text-xs font-bold py-2 rounded-lg border border-red-900 transition-colors">
+                    🗑️ 리스트 전체 비우기
+                </button>
+            </div>
+
+            <div class="flex flex-col gap-2 mt-auto">
+                <button id="btn-drop" class="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xl font-black py-4 rounded-xl shadow-[0_0_20px_rgba(79,70,229,0.6)] transition-all transform hover:-translate-y-1 active:translate-y-1">
+                    🚀 투하 시작!
+                </button>
+                <button id="btn-reset" class="w-full bg-slate-700 hover:bg-slate-600 text-slate-200 font-bold py-3 rounded-xl transition-all">
+                    맵 초기화
+                </button>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
